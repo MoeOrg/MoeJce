@@ -1,7 +1,7 @@
 package moe.gcd.jce.stream;
 
-import moe.gcd.jce.exception.JceDecodeException;
 import moe.gcd.jce.JceStruct;
+import moe.gcd.jce.exception.JceDecodeException;
 import moe.gcd.jce.field.*;
 
 import java.nio.ByteBuffer;

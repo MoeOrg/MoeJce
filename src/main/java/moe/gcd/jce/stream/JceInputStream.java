@@ -1,14 +1,16 @@
 package moe.gcd.jce.stream;
 
 import moe.gcd.jce.HexUtil;
-import moe.gcd.jce.exception.JceDecodeException;
 import moe.gcd.jce.JceStruct;
+import moe.gcd.jce.exception.JceDecodeException;
 
 import java.io.UnsupportedEncodingException;
 import java.lang.reflect.Array;
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.util.*;
+
+import static moe.gcd.jce.JceStruct.*;
 
 public final class JceInputStream {
     private ByteBuffer buffer;
@@ -39,7 +41,7 @@ public final class JceInputStream {
         if (skipToTag(tag)) {
             HeadData head = new HeadData();
             readHead(head);
-            if (head.type != JceStruct.LIST) {
+            if (head.type != LIST) {
                 throw new JceDecodeException("Type mismatch.");
             }
 
@@ -69,42 +71,6 @@ public final class JceInputStream {
         return 1;
     }
 
-    private <K, V> Map<K, V> readMap(Map<K, V> defaultValue, Map<K, V> map, int tag, boolean force) {
-        if ((map == null) || (map.isEmpty())) {
-            return new HashMap<>();
-        }
-
-        Map.Entry<K, V> entry = map.entrySet().iterator().next();
-        K key = entry.getKey();
-        V value = entry.getValue();
-        if (skipToTag(tag)) {
-            HeadData head = new HeadData();
-            readHead(head);
-            switch (head.type) {
-                default:
-                    throw new JceDecodeException("type mismatch.");
-                case JceStruct.MAP: {
-                    HashMap<K, V> newMap = new HashMap<>();
-                    int size = read(0, 0, true);
-                    if (size < 0) {
-                        throw new JceDecodeException("size invalid: " + size);
-                    }
-
-                    for (int i = 0; i < size; i++) {
-                        newMap.put(read(key, 0, true), read(value, 0, true));
-                    }
-                    return newMap;
-                }
-            }
-        }
-
-        if (force) {
-            throw new JceDecodeException("require field not exist.");
-        }
-
-        return defaultValue;
-    }
-
     private void skip(int shift) {
         this.buffer.position(this.buffer.position() + shift);
     }
@@ -117,58 +83,60 @@ public final class JceInputStream {
 
     private void skipField(byte tag) {
         switch (tag) {
-            default:
-                throw new JceDecodeException("invalid type.");
-            case JceStruct.BYTE:
+            case BYTE:
                 skip(1);
-            case JceStruct.STRUCT_END:
-            case JceStruct.ZERO_TAG:
+            case STRUCT_END:
+            case ZERO_TAG:
                 return;
-            case JceStruct.SHORT:
+            case SHORT:
                 skip(2);
                 return;
-            case JceStruct.INT:
+            case INT:
                 skip(4);
                 return;
-            case JceStruct.LONG:
+            case LONG:
                 skip(8);
                 return;
-            case JceStruct.FLOAT:
+            case FLOAT:
                 skip(4);
                 return;
-            case JceStruct.DOUBLE:
+            case DOUBLE:
                 skip(8);
                 return;
-            case JceStruct.STRING1:
+            case STRING1:
                 skip(this.buffer.get() & 0xff);
                 return;
-            case JceStruct.STRING4:
+            case STRING4:
                 skip(this.buffer.getInt());
                 return;
-            case JceStruct.MAP: {
+            case MAP: {
                 int length = read(0, 0, true);
                 for (int j = 0; j < length * 2; j++) {
                     skipField();
                 }
             }
-            case JceStruct.LIST: {
+            case LIST: {
                 int length = read(0, 0, true);
                 for (int j = 0; j < length; j++) {
                     skipField();
                 }
             }
-            case JceStruct.SIMPLE_LIST:
+            case SIMPLE_LIST:
                 HeadData head = new HeadData();
                 readHead(head);
-                if (head.type != JceStruct.BYTE) {
+                if (head.type != BYTE) {
                     throw new JceDecodeException("skipField with invalid type, type value: " + tag + ", " + head.type);
                 }
 
                 skip(read(0, 0, true));
                 return;
-            case 10:
+            case STRUCT_BEGIN:
+                skipToStructEnd();
+                return;
+            default:
+                throw new JceDecodeException("invalid type.");
         }
-        skipToStructEnd();
+
     }
 
     public JceStruct directRead(JceStruct struct, int tag, boolean force) {
@@ -185,6 +153,8 @@ public final class JceInputStream {
             }
             struct.readFrom(this);
             skipToStructEnd();
+
+            return struct;
         } else if (force) {
             throw new JceDecodeException("Require field not exist.");
         }
@@ -202,9 +172,9 @@ public final class JceInputStream {
             switch (head.type) {
                 default:
                     throw new JceDecodeException("type mismatch.");
-                case JceStruct.ZERO_TAG:
+                case ZERO_TAG:
                     return 0;
-                case JceStruct.BYTE:
+                case BYTE:
                     return this.buffer.get();
             }
         } else if (force) {
@@ -221,9 +191,9 @@ public final class JceInputStream {
             switch (head.type) {
                 default:
                     throw new JceDecodeException("type mismatch.");
-                case JceStruct.ZERO_TAG:
+                case ZERO_TAG:
                     return 0;
-                case JceStruct.FLOAT:
+                case FLOAT:
                     return this.buffer.getFloat();
                 case 5:
                     return this.buffer.getDouble();
@@ -242,9 +212,9 @@ public final class JceInputStream {
             switch (head.type) {
                 default:
                     throw new JceDecodeException("type mismatch.");
-                case JceStruct.ZERO_TAG:
+                case ZERO_TAG:
                     return 0;
-                case JceStruct.FLOAT:
+                case FLOAT:
                     return this.buffer.getFloat();
             }
         } else if (force) {
@@ -263,11 +233,11 @@ public final class JceInputStream {
                     throw new JceDecodeException("type mismatch.");
                 case 12:
                     return 0;
-                case JceStruct.BYTE:
+                case BYTE:
                     return this.buffer.get();
-                case JceStruct.SHORT:
+                case SHORT:
                     return this.buffer.getShort();
-                case JceStruct.INT:
+                case INT:
                     return this.buffer.getInt();
             }
         } else if (force) {
@@ -286,13 +256,13 @@ public final class JceInputStream {
                     throw new JceDecodeException("type mismatch.");
                 case 12:
                     return 0;
-                case JceStruct.BYTE:
+                case BYTE:
                     return this.buffer.get();
-                case JceStruct.SHORT:
+                case SHORT:
                     return this.buffer.getShort();
-                case JceStruct.INT:
+                case INT:
                     return this.buffer.getInt();
-                case JceStruct.LONG:
+                case LONG:
                     return this.buffer.getLong();
             }
         } else if (force) {
@@ -308,7 +278,7 @@ public final class JceInputStream {
                 defaultValue = defaultValue.getClass().newInstance();
                 HeadData head = new HeadData();
                 readHead(head);
-                if (head.type != JceStruct.STRUCT_BEGIN) {
+                if (head.type != STRUCT_BEGIN) {
                     throw new JceDecodeException("Type mismatch.");
                 }
             } catch (Exception e) {
@@ -393,7 +363,7 @@ public final class JceInputStream {
             switch (head.type) {
                 default:
                     throw new JceDecodeException("type mismatch.");
-                case JceStruct.STRING1: {
+                case STRING1: {
                     byte[] data = new byte[this.buffer.get() & 0xff];
                     this.buffer.get(data);
                     try {
@@ -402,9 +372,9 @@ public final class JceInputStream {
                         return new String(data);
                     }
                 }
-                case JceStruct.STRING4: {
+                case STRING4: {
                     int length = this.buffer.getInt();
-                    if ((length > JceStruct.JCE_MAX_STRING_LENGTH) || (length < 0) || (length > this.buffer.capacity())) {
+                    if ((length > JCE_MAX_STRING_LENGTH) || (length < 0) || (length > this.buffer.capacity())) {
                         throw new JceDecodeException("String too long: " + tag);
                     }
                     byte[] data = new byte[length];
@@ -432,9 +402,9 @@ public final class JceInputStream {
                     throw new JceDecodeException("type mismatch.");
                 case 12:
                     return 0;
-                case JceStruct.BYTE:
+                case BYTE:
                     return (short) (this.buffer.get() & 0xff);
-                case JceStruct.SHORT:
+                case SHORT:
                     return this.buffer.getShort();
             }
         } else if (force) {
@@ -455,10 +425,10 @@ public final class JceInputStream {
             switch (head.type) {
                 default:
                     throw new JceDecodeException("Type mismatch.");
-                case JceStruct.SIMPLE_LIST: {
+                case SIMPLE_LIST: {
                     HeadData headData = new HeadData();
                     readHead(headData);
-                    if (headData.type != JceStruct.BYTE) {
+                    if (headData.type != BYTE) {
                         throw new JceDecodeException("Type mismatch, tag: " + tag + ", type: " + head.type + ", " + headData.type);
                     }
                     int length = read(0, 0, true);
@@ -469,7 +439,7 @@ public final class JceInputStream {
                     this.buffer.get(bytes);
                     return bytes;
                 }
-                case JceStruct.LIST: {
+                case LIST: {
                     int length = read(0, 0, true);
                     if ((length < 0) || (length > this.buffer.capacity())) {
                         throw new JceDecodeException("size invalid: " + length);
@@ -495,7 +465,7 @@ public final class JceInputStream {
             switch (head.type) {
                 default:
                     throw new JceDecodeException("Type mismatch.");
-                case JceStruct.LIST:
+                case LIST:
                     int length = read(0, 0, true);
                     if ((length < 0) || (length > this.buffer.capacity())) {
                         throw new JceDecodeException("size invalid: " + length);
@@ -520,7 +490,7 @@ public final class JceInputStream {
             switch (head.type) {
                 default:
                     throw new JceDecodeException("Type mismatch.");
-                case JceStruct.LIST:
+                case LIST:
                     int length = read(0, 0, true);
                     if ((length < 0) || (length > this.buffer.capacity())) {
                         throw new JceDecodeException("size invalid: " + length);
@@ -545,7 +515,7 @@ public final class JceInputStream {
             switch (head.type) {
                 default:
                     throw new JceDecodeException("Type mismatch.");
-                case JceStruct.LIST:
+                case LIST:
                     int length = read(0, 0, true);
                     if ((length < 0) || (length > this.buffer.capacity())) {
                         throw new JceDecodeException("size invalid: " + length);
@@ -570,7 +540,7 @@ public final class JceInputStream {
             switch (head.type) {
                 default:
                     throw new JceDecodeException("Type mismatch.");
-                case JceStruct.LIST:
+                case LIST:
                     int length = read(0, 0, true);
                     if ((length < 0) || (length > this.buffer.capacity())) {
                         throw new JceDecodeException("size invalid: " + length);
@@ -603,7 +573,7 @@ public final class JceInputStream {
             switch (head.type) {
                 default:
                     throw new JceDecodeException("Type mismatch.");
-                case JceStruct.LIST:
+                case LIST:
                     int length = read(0, 0, true);
                     if ((length < 0) || (length > this.buffer.capacity())) {
                         throw new JceDecodeException("size invalid: " + length);
@@ -628,7 +598,7 @@ public final class JceInputStream {
             switch (head.type) {
                 default:
                     throw new JceDecodeException("Type mismatch.");
-                case JceStruct.LIST:
+                case LIST:
                     int length = read(0, 0, true);
                     if ((length < 0) || (length > this.buffer.capacity())) {
                         throw new JceDecodeException("size invalid: " + length);
@@ -675,14 +645,14 @@ public final class JceInputStream {
             switch (head.type) {
                 default:
                     throw new JceDecodeException("Type mismatch.");
-                case JceStruct.STRING1: {
+                case STRING1: {
                     byte[] bytes = new byte[this.buffer.get() & 0xff];
                     this.buffer.get(bytes);
                     return HexUtil.bytes2HexStr(bytes);
                 }
-                case JceStruct.STRING4: {
+                case STRING4: {
                     int length = this.buffer.getInt();
-                    if ((length > JceStruct.JCE_MAX_STRING_LENGTH) || (length < 0) || (length > this.buffer.capacity())) {
+                    if ((length > JCE_MAX_STRING_LENGTH) || (length < 0) || (length > this.buffer.capacity())) {
                         throw new JceDecodeException("String too long: " + tag);
                     }
                     byte[] bytes = new byte[length];
@@ -723,31 +693,31 @@ public final class JceInputStream {
                             case 0:
                                 skip(1);
                                 break;
-                            case JceStruct.MAP:
-                            case JceStruct.LIST:
+                            case MAP:
+                            case LIST:
                                 break;
-                            case JceStruct.SHORT:
+                            case SHORT:
                                 skip(2);
                                 break;
-                            case JceStruct.INT:
+                            case INT:
                                 skip(4);
                                 break;
-                            case JceStruct.LONG:
+                            case LONG:
                                 skip(8);
                                 break;
-                            case JceStruct.FLOAT:
+                            case FLOAT:
                                 skip(4);
                                 break;
-                            case JceStruct.DOUBLE:
+                            case DOUBLE:
                                 skip(8);
                                 break;
-                            case JceStruct.STRING1:
+                            case STRING1:
                                 skip(this.buffer.get() & 0xff);
                                 break;
-                            case JceStruct.STRING4:
+                            case STRING4:
                                 skip(this.buffer.getInt());
                                 break;
-                            case JceStruct.STRUCT_BEGIN:
+                            case STRUCT_BEGIN:
                                 try {
                                     JceStruct struct = (JceStruct) Class.forName(JceStruct.class.getName()).getConstructor().newInstance();
                                     struct.readFrom(this);
@@ -758,10 +728,10 @@ public final class JceInputStream {
                                     e.printStackTrace();
                                     throw new JceDecodeException("type mismatch." + e);
                                 }
-                            case JceStruct.ZERO_TAG:
+                            case ZERO_TAG:
                                 list.add(0);
                                 break;
-                            case JceStruct.STRUCT_END:
+                            case STRUCT_END:
                             default:
                                 throw new JceDecodeException("Type mismatch.");
                         }
@@ -778,12 +748,45 @@ public final class JceInputStream {
         return (HashMap<K, V>) readMap(new HashMap<>(), map, tag, force);
     }
 
+    private <K, V> Map<K, V> readMap(Map<K, V> newMap, Map<K, V> map, int tag, boolean force) {
+        if ((map == null) || (map.isEmpty())) {
+            return new HashMap<>();
+        }
+
+        Map.Entry<K, V> entry = map.entrySet().iterator().next();
+        K key = entry.getKey();
+        V value = entry.getValue();
+        if (skipToTag(tag)) {
+            HeadData head = new HeadData();
+            readHead(head);
+            switch (head.type) {
+                case MAP: {
+                    int size = read(0, 0, true);
+                    if (size < 0) {
+                        throw new JceDecodeException("size invalid: " + size);
+                    }
+
+                    for (int i = 0; i < size; i++) {
+                        newMap.put(read(key, 0, true), read(value, 0, true));
+                    }
+                    return newMap;
+                }
+                default:
+                    throw new JceDecodeException("type mismatch.");
+            }
+        } else if (force) {
+            throw new JceDecodeException("require field not exist.");
+        }
+
+        return newMap;
+    }
+
     public String readString(int tag, boolean force) {
         if (skipToTag(tag)) {
             HeadData head = new HeadData();
             readHead(head);
             switch (head.type) {
-                case JceStruct.STRING1: {
+                case STRING1: {
                     byte[] bytes = new byte[this.buffer.get() & 0xff];
                     this.buffer.get(bytes);
 
@@ -793,9 +796,9 @@ public final class JceInputStream {
                         return new String(bytes);
                     }
                 }
-                case JceStruct.STRING4:
+                case STRING4:
                     int length = this.buffer.getInt();
-                    if ((length > JceStruct.JCE_MAX_STRING_LENGTH) || (length < 0) || (length > this.buffer.capacity())) {
+                    if ((length > JCE_MAX_STRING_LENGTH) || (length < 0) || (length > this.buffer.capacity())) {
                         throw new JceDecodeException("String too long: " + length);
                     }
 
@@ -822,7 +825,7 @@ public final class JceInputStream {
             HeadData head = new HeadData();
             readHead(head);
             switch (head.type) {
-                case JceStruct.MAP:
+                case MAP:
                     int size = read(0, 0, true);
                     if (size < 0) {
                         throw new JceDecodeException("size invalid: " + size);
@@ -851,7 +854,7 @@ public final class JceInputStream {
     public void skipToStructEnd() {
         HeadData head = new HeadData();
 
-        while (head.type != JceStruct.STRUCT_END) {
+        while (head.type != STRUCT_END) {
             readHead(head);
             skipField(head.type);
         }
@@ -862,18 +865,20 @@ public final class JceInputStream {
             HeadData head = new HeadData();
             while (true) {
                 int peak = peakHead(head);
-                if (head.type == JceStruct.STRUCT_END) {
+                if (head.type == STRUCT_END) {
                     return false;
                 }
                 if (tag <= head.tag) {
-                    if (tag != head.tag) {
-                        break;
-                    }
+                    //break;
                     return true;
                 }
                 skip(peak);
                 skipField(head.type);
             }
+
+            /*if (tag == head.tag) {
+                return true;
+            }*/
         } catch (JceDecodeException e) {
             return false;
         } catch (BufferUnderflowException ignored) {
